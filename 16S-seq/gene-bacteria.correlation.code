@@ -1,0 +1,28 @@
+## gene~bacteria correlation
+```{r, eval=FALSE}
+# load microbe data
+setwd("D:\\ljj\\1_HZ\\RNAseq")
+
+load("normalized_counts.RData")
+load('D:\\ljj\\1_HZ\\g3.RData')
+# head(g3)
+
+# select diff genes
+load("res1.RData")
+sig.gene <- res1[which(res1$pvalue<0.01),]
+genes <- rownames(sig.gene)
+# genes
+
+# expression data
+normalized_counts2 <- t(normalized_counts)
+rownames(normalized_counts2) <-lapply(rownames(normalized_counts2), function(x){gsub("[A-z]","",x)})
+ids <- intersect(rownames(normalized_counts2), rownames(g3))
+mat <- data.frame(g3[ids,], normalized_counts2[ids,genes])
+head(mat)
+
+# correlation 
+library(psych)
+cortest_psy_sdj <- corr.test(mat[,1:131], mat[,132:478], method = "pearson", adjust = "fdr")
+# save(cortest_psy_sdj, file="cortest_psy_sdj.RData")
+
+```
