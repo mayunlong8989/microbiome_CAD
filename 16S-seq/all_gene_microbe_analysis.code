@@ -1,0 +1,214 @@
+library(DESeq2)   
+library(pheatmap)  
+library(ggplot2)   
+
+## functions
+```{r}
+res <-sapply(
+  as.data.frame(clc3),
+  function(x) Map(function(a,b) my_corr(a,b),
+                  list(x),
+                  as.data.frame(g3)
+  )
+)
+## FDR correction
+res1 <- matrix(unlist(res), ncol = 2, byrow = T)
+
+res.p<-matrix(res1[,1],ncol = ncol(clc3), byrow = F)
+colnames(res.p)<-colnames(clc3)
+rownames(res.p)<-colnames(g3)
+res.p[is.na(res.p)]<-1
+res.rho<-matrix(res1[,2],ncol = ncol(clc3), byrow = F)
+colnames(res.rho)<-colnames(clc3)
+rownames(res.rho)<-colnames(g3)
+res.rho[is.na(res.rho)]<-0
+
+res.p2 <- res.p
+res.rho2 <- res.rho
+res.p2[res.p2>0.05] <- 1
+#res.rho2[res.p2>0.05] <- 0
+rs <- apply(res.p2, 1, function(x){sum(x<1)})
+cs <- apply(res.p2, 2, function(x){sum(x<1)})
+res.p3 <- res.p2[names(rs[rs>0]),names(cs[cs>0])]
+res.rho3 <- res.rho2[names(rs[rs>0]),names(cs[cs>0])]
+
+rownames(res.p3) <- unlist(lapply(rownames(res.p3), function(x){strsplit(x, split = "g__")[[1]][2]}))
+rownames(res.rho3) <- unlist(lapply(rownames(res.rho3), function(x){strsplit(x, split = "g__")[[1]][2]}))
+
+
+```
+
+## heatmap
+```{R}
+
+pp <- reshape2::melt(res.rho3)
+tmp <- reshape2::melt(res.p3)
+pp$fdr= tmp[,3]
+pp$fdr2 <- ""
+pp$fdr2[pp$fdr<0.001] <- "***"
+pp$fdr2[pp$fdr<0.01] <- "**"
+pp$fdr2[pp$fdr<0.05] <- "*"
+
+
+
+library(pheatmap)
+sig <-  ifelse(res.p3 <=0.05,
+               ifelse(res.p3 < 0.01,
+                      ifelse(res.p3 < 0.001, '***','**'),'*'),'')
+
+pheatmap(res.rho3, display_numbers =sig)  
+
+# write.table(res.rho3, file="res.rho3.tsv", quote = F, sep="\t")
+
+```
+
+# RNAseq data
+
+## diffrential analysis
+```{r, eval=FALSE}
+setwd("D:\\ljj\\1_HZ\\RNAseq")
+countData <- read.table("matrix.count",row.names=1,header=T, sep="\t")
+countData <- countData[rowMeans(countData)>1,]             
+
+
+## 2.Diff analysis
+
+# group info
+tmp <- unlist(lapply(colnames(countData), function(x){substr(x, nchar(x), nchar(x))}))
+colData <- data.frame(row.names=colnames(countData), group=tmp)
+colData$group <- as.factor(colData$group)
+
+dds <- DESeqDataSetFromMatrix(countData = countData, colData = colData, design = ~ group)
+head(dds) 
+
+# normalize
+dds1 <- DESeq(dds) 
+res <- results(dds1, contrast = c('group', 'p', 'n'), independentFiltering=F)
+summary(res)  
+
+# res data.frame
+res1 <- data.frame(res, stringsAsFactors = FALSE, check.names = FALSE)
+# sort
+res1 <- res1[order(res1$pvalue, res1$log2FoldChange, decreasing = c(FALSE, TRUE)), ]
+
+head(res1)
+# save(res1, file="res1.RData")
+```
+
+## volcano plot
+```{r}
+
+load("myford\\res1.RData")
+## volcano plot
+library("ggrepel")
+
+options(repr.plot.width=5, repr.plot.height=5)
+
+genes<- res1
+genes$color <- ifelse(genes$pvalue<0.05 & abs(genes$log2FoldChange)>= 0,ifelse(genes$log2FoldChange > 0,'red','blue'),'gray')
+color <- c(red = "red",gray = "gray",blue = "blue")
+genes$ID <- rownames(genes)
+p <- ggplot(
+  genes, aes(log2FoldChange, -log10(pvalue), col = color)) +  
+  geom_point() +
+  theme_bw() +
+  scale_color_manual(values = color) +
+  labs(x="log2 (fold change)",y="-log10 (q-value)") +
+  geom_hline(yintercept = -log10(0.05), lty=4,col="grey",lwd=0.6) +
+ # geom_vline(xintercept = c(-1, 1), lty=4,col="grey",lwd=0.6) +
+  theme(legend.position = "none",
+        panel.grid=element_blank(),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14))
+p
+#ggsave(p, file="plot_volcano.pdf",width=5, height=5)
+#write.table(genes, file="\\RNAseq\\diff_genes.tsv", sep="\t", quote=F)
+
+```
+
+## gene~bacteria correlation
+```{r, eval=FALSE}
+# load microbe data
+setwd("D:\\ljj\\1_HZ\\RNAseq")
+
+load("normalized_counts.RData")
+load('D:\\ljj\\1_HZ\\g3.RData')
+# head(g3)
+
+# select diff genes
+load("res1.RData")
+sig.gene <- res1[which(res1$pvalue<0.01),]
+genes <- rownames(sig.gene)
+# genes
+
+# expression data
+normalized_counts2 <- t(normalized_counts)
+rownames(normalized_counts2) <-lapply(rownames(normalized_counts2), function(x){gsub("[A-z]","",x)})
+ids <- intersect(rownames(normalized_counts2), rownames(g3))
+mat <- data.frame(g3[ids,], normalized_counts2[ids,genes])
+head(mat)
+
+# correlation 
+library(psych)
+cortest_psy_sdj <- corr.test(mat[,1:131], mat[,132:478], method = "pearson", adjust = "fdr")
+# save(cortest_psy_sdj, file="cortest_psy_sdj.RData")
+
+```
+
+
+## heatmap
+```{r, fig.height=6, fig.width=20}
+setwd("D:\\ljj\\1_HZ\\RNAseq")
+
+load("cortest_psy_sdj.RData")
+max.fdr <- cortest_psy_sdj$p.adj
+max.r <- cortest_psy_sdj$r
+
+max.r <- max.r[rowSums(max.fdr<0.05)> 0,colSums(max.fdr < 0.05)>0] 
+max.fdr <- max.fdr[rownames(max.r),colnames(max.r)] 
+
+pp <- reshape2::melt(max.r)
+tmp <- reshape2::melt(max.fdr)
+
+pp$col <-   ifelse(tmp$value <=0.05,
+                      ifelse(tmp$value < 0.01,
+                             ifelse(tmp$value < 0.001, '***','**'),'*'),'')
+
+
+sig <-  ifelse(max.fdr <=0.05,
+                      ifelse(max.fdr < 0.01,
+                             ifelse(max.fdr < 0.001, '***','**'),'*'),'')
+
+options(repr.plot.width=20, repr.plot.height=5)
+
+p <- pheatmap::pheatmap(max.r, display_numbers =sig)
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+}
+
+
+save_pheatmap_pdf(p, "heatmap.pdf", 20, 6)
+
+# write.table(max.r, file="max.r.tsv", quote = F, sep = "\t")
+
+```
+
+
+## plot 
+ options(repr.plot.width=15, repr.plot.height=2.8)
+m1 <- mat[,c(grep("g__Fusicatenibacter",colnames(mat), value = T),"GBP2","MLKL","GPR65","SLK","ETV6","AFF1","CD70")]
+m2 <- reshape2::melt(m1,id="k__Bacteria.p__Firmicutes.c__Clostridia.o__Lachnospirales.f__Lachnospiraceae.g__Fusicatenibacter." )
+p <- ggplot(m2, aes(y=log2(k__Bacteria.p__Firmicutes.c__Clostridia.o__Lachnospirales.f__Lachnospiraceae.g__Fusicatenibacter.),
+              x=log2(value)))+
+    geom_point()+
+    facet_wrap(~variable, nrow=1, scale="free")+
+    geom_smooth(method = "lm")+
+    theme_classic()
+p
+# ggsave(p, file="corr.plot.pdf", width=15, height = 2.8)
