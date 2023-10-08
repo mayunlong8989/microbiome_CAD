@@ -1,0 +1,23 @@
+## heatmap
+```{R}
+
+pp <- reshape2::melt(res.rho3)
+tmp <- reshape2::melt(res.p3)
+pp$fdr= tmp[,3]
+pp$fdr2 <- ""
+pp$fdr2[pp$fdr<0.001] <- "***"
+pp$fdr2[pp$fdr<0.01] <- "**"
+pp$fdr2[pp$fdr<0.05] <- "*"
+
+
+
+library(pheatmap)
+sig <-  ifelse(res.p3 <=0.05,
+               ifelse(res.p3 < 0.01,
+                      ifelse(res.p3 < 0.001, '***','**'),'*'),'')
+
+pheatmap(res.rho3, display_numbers =sig)  
+
+# write.table(res.rho3, file="res.rho3.tsv", quote = F, sep="\t")
+
+```
