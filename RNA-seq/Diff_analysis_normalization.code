@@ -1,0 +1,33 @@
+
+# RNAseq data
+
+## diffrential analysis
+```{r, eval=FALSE}
+setwd("D:\\ljj\\1_HZ\\RNAseq")
+countData <- read.table("matrix.count",row.names=1,header=T, sep="\t")
+countData <- countData[rowMeans(countData)>1,]             
+
+
+## 2.Diff analysis
+
+# group info
+tmp <- unlist(lapply(colnames(countData), function(x){substr(x, nchar(x), nchar(x))}))
+colData <- data.frame(row.names=colnames(countData), group=tmp)
+colData$group <- as.factor(colData$group)
+
+dds <- DESeqDataSetFromMatrix(countData = countData, colData = colData, design = ~ group)
+head(dds) 
+
+# normalize
+dds1 <- DESeq(dds) 
+res <- results(dds1, contrast = c('group', 'p', 'n'), independentFiltering=F)
+summary(res)  
+
+# res data.frame
+res1 <- data.frame(res, stringsAsFactors = FALSE, check.names = FALSE)
+# sort
+res1 <- res1[order(res1$pvalue, res1$log2FoldChange, decreasing = c(FALSE, TRUE)), ]
+
+head(res1)
+# save(res1, file="res1.RData")
+```
