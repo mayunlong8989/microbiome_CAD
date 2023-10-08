@@ -1,0 +1,143 @@
+
+#############################
+##
+##  QC
+##
+#############################
+cd /myfold/B..qiime
+for n in *
+do
+cd $n
+mkdir A.${n}_fastqc
+fastqc -o A.${n}_fastqc ${n}.R1.fastq.gz ${n}.R2.fastq.gz &
+cd ..
+done
+
+#############################
+##
+##  metadata
+##
+#############################
+cd /myfold/B..qiime
+mkdir B..qiime
+cp /myfold/greengene_13_8_99_nb_classifier.qza ./B..qiime
+echo -ne "sample-id,absolute-filepath,direction\n" > ./B..qiime/input_list
+for n in *
+do
+echo -ne "${n},/myfold/${n}.R1.fastq.gz,forward\n" >> ./B..qiime/input_list
+echo -ne "${n},/myfold/${n}.R2.fastq.gz,reverse\n" >> ./B..qiime/input_list
+done
+
+##################
+#	QIIME2   #
+#
+##################
+#https://view.qiime2.org/
+###############################
+#
+
+# import
+
+cd /myfold/myproject_stool/myproject_raw_data_16S/B..qiime
+qiime tools import \
+  --type 'SampleData[PairedEndSequencesWithQuality]' \
+  --input-path input_list \
+  --output-path 1.demux.qza \
+  --input-format PairedEndFastqManifestPhred33 
+  
+qiime demux summarize \
+	--i-data 1.demux.qza \
+	--o-visualization 1.demux.qzv   
+ 
+ 
+#2.OTU table
+
+qiime dada2 denoise-paired \
+  --i-demultiplexed-seqs 1.demux.qza \
+  --p-trim-left-f 2 \
+  --p-trim-left-r 5 \
+  --p-trunc-len-f 280 \
+  --p-trunc-len-r 250 \
+  --p-n-threads 40 \
+  --o-table myrun/2.table-dada2.qza \
+  --o-representative-sequences myrun/2.rep-seqs-dada2.qza \
+  --o-denoising-stats myrun/2.stats-dada2.qza &
+
+qiime metadata tabulate \
+  --m-input-file myrun/2.stats-dada2.qza \
+  --o-visualization myrun/2.stats-dada2.qzv
+  
+
+#Features
+qiime feature-table summarize \
+	--i-table myrun/2.table-dada2.qza \
+	--o-visualization myrun/2.table-dada2.qzv
+	
+qiime feature-table tabulate-seqs \
+	--i-data myrun/2.rep-seqs-dada2.qza \
+	--o-visualization myrun/2.rep-seqs-dada2.qzv
+
+#####    OTU-based diversity 
+qiime phylogeny align-to-tree-mafft-fasttree \
+  --p-n-threads 30 \
+  --i-sequences myrun/2.rep-seqs-dada2.qza \
+  --o-alignment myrun/3.aligned-rep-seqs.qza \
+  --o-masked-alignment myrun/3.masked-aligned-rep-seqs.qza \
+  --o-tree myrun/3.unrooted-tree.qza \
+  --o-rooted-tree myrun/3.rooted-tree.qza &
+  
+#Alpha rarefaction plotting
+qiime diversity alpha-rarefaction \
+  --i-table myrun/2.table-dada2.qza \
+  --i-phylogeny myrun/3.rooted-tree.qza \
+  --p-max-depth k \
+  --m-metadata-file metadata.txt \
+  --o-visualization myrun/3.alpha-rarefaction.qzv  
+  
+
+# alpha diversity 
+qiime diversity core-metrics-phylogenetic \
+  --i-phylogeny myrun/3.rooted-tree.qza \
+  --i-table myrun/2.table-dada2.qza \
+  --p-sampling-depth k \
+  --m-metadata-file metadata.txt \
+  --output-dir myrun/3.core-metrics-results
+ 
+ ### simpson 
+qiime diversity alpha \
+  --i-table myrun/2.table-dada2.qza \
+  --p-metric simpson \
+  --o-alpha-diversity myrun/3.core-metrics-results
+  
+
+#Silva 
+qiime feature-classifier classify-sklearn \
+  --i-classifier /myfold/B..qiime/train/silva138/silva-138-99-seqs-341F805R-classifier.qza \
+  --i-reads myrun/2.rep-seqs-dada2.qza \
+  --o-classification myrun/3.taxonomy-rep-seqs-dada2-silva.qza
+
+# OTU(ASV) anno
+qiime metadata tabulate \
+  --m-input-file myrun/3.taxonomy-rep-seqs-dada2-silva.qza \
+  --o-visualization myrun/3.taxonomy-rep-seqs-dada2-silva.qzv
+
+# taxo table
+qiime taxa collapse \
+  --i-table table.qza \
+  --i-taxonomy taxonomy.qza \
+  --p-level 6 \ # or whatever level of taxonomy you want
+  --output-dir taxtable
+  
+
+# barplot
+qiime taxa barplot \
+  --i-table myrun/2.table-dada2.dada2.qza \
+  --i-taxonomy myrun/3.taxonomy-rep-seqs-dada2-silva.qza \
+  --m-metadata-file metadata.txt \
+  --o-visualization myrun/4.taxonomy-rep-seqs-dada2-silva_barplot.qzv &
+  
+#feature table
+qiime tools export \
+  --input-path myrun/2.table-dada2.qza \
+  --output-path myrun/2.table-dada2
+
