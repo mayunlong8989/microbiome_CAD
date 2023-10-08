@@ -1,0 +1,13 @@
+
+## plot 
+ options(repr.plot.width=15, repr.plot.height=2.8)
+m1 <- mat[,c(grep("g__Fusicatenibacter",colnames(mat), value = T),"GBP2","MLKL","GPR65","SLK","ETV6","AFF1","CD70")]
+m2 <- reshape2::melt(m1,id="k__Bacteria.p__Firmicutes.c__Clostridia.o__Lachnospirales.f__Lachnospiraceae.g__Fusicatenibacter." )
+p <- ggplot(m2, aes(y=log2(k__Bacteria.p__Firmicutes.c__Clostridia.o__Lachnospirales.f__Lachnospiraceae.g__Fusicatenibacter.),
+              x=log2(value)))+
+    geom_point()+
+    facet_wrap(~variable, nrow=1, scale="free")+
+    geom_smooth(method = "lm")+
+    theme_classic()
+p
+# ggsave(p, file="corr.plot.pdf", width=15, height = 2.8)
