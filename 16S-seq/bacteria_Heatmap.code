@@ -1,0 +1,43 @@
+
+## heatmap
+```{r, fig.height=6, fig.width=20}
+setwd("D:\\ljj\\1_HZ\\RNAseq")
+
+load("cortest_psy_sdj.RData")
+max.fdr <- cortest_psy_sdj$p.adj
+max.r <- cortest_psy_sdj$r
+
+max.r <- max.r[rowSums(max.fdr<0.05)> 0,colSums(max.fdr < 0.05)>0] 
+max.fdr <- max.fdr[rownames(max.r),colnames(max.r)] 
+
+pp <- reshape2::melt(max.r)
+tmp <- reshape2::melt(max.fdr)
+
+pp$col <-   ifelse(tmp$value <=0.05,
+                      ifelse(tmp$value < 0.01,
+                             ifelse(tmp$value < 0.001, '***','**'),'*'),'')
+
+
+sig <-  ifelse(max.fdr <=0.05,
+                      ifelse(max.fdr < 0.01,
+                             ifelse(max.fdr < 0.001, '***','**'),'*'),'')
+
+options(repr.plot.width=20, repr.plot.height=5)
+
+p <- pheatmap::pheatmap(max.r, display_numbers =sig)
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+}
+
+
+save_pheatmap_pdf(p, "heatmap.pdf", 20, 6)
+
+# write.table(max.r, file="max.r.tsv", quote = F, sep = "\t")
+
+```
