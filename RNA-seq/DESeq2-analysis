@@ -1,0 +1,39 @@
+library(DESeq2)   
+library(pheatmap)  
+library(ggplot2)   
+
+## functions
+```{r}
+res <-sapply(
+  as.data.frame(clc3),
+  function(x) Map(function(a,b) my_corr(a,b),
+                  list(x),
+                  as.data.frame(g3)
+  )
+)
+## FDR correction
+res1 <- matrix(unlist(res), ncol = 2, byrow = T)
+
+res.p<-matrix(res1[,1],ncol = ncol(clc3), byrow = F)
+colnames(res.p)<-colnames(clc3)
+rownames(res.p)<-colnames(g3)
+res.p[is.na(res.p)]<-1
+res.rho<-matrix(res1[,2],ncol = ncol(clc3), byrow = F)
+colnames(res.rho)<-colnames(clc3)
+rownames(res.rho)<-colnames(g3)
+res.rho[is.na(res.rho)]<-0
+
+res.p2 <- res.p
+res.rho2 <- res.rho
+res.p2[res.p2>0.05] <- 1
+#res.rho2[res.p2>0.05] <- 0
+rs <- apply(res.p2, 1, function(x){sum(x<1)})
+cs <- apply(res.p2, 2, function(x){sum(x<1)})
+res.p3 <- res.p2[names(rs[rs>0]),names(cs[cs>0])]
+res.rho3 <- res.rho2[names(rs[rs>0]),names(cs[cs>0])]
+
+rownames(res.p3) <- unlist(lapply(rownames(res.p3), function(x){strsplit(x, split = "g__")[[1]][2]}))
+rownames(res.rho3) <- unlist(lapply(rownames(res.rho3), function(x){strsplit(x, split = "g__")[[1]][2]}))
+
+
+```
